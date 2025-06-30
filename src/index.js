@@ -1,5 +1,8 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -12,7 +15,36 @@ const LLMAgent = require('./services/llmAgent');
 const BlockchainService = require('./services/blockchainService');
 
 const app = express();
-const server = http.createServer(app);
+
+// HTTPS 설정
+let server;
+const useHttps = process.env.USE_HTTPS === 'true';
+
+if (useHttps) {
+  // 인증서 파일 경로 확인
+  const sslKeyPath = process.env.SSL_KEY_PATH;
+  const sslCertPath = process.env.SSL_CERT_PATH;
+  
+  if (!sslKeyPath || !sslCertPath) {
+    logger.error('HTTPS가 활성화되었지만 SSL_KEY_PATH 또는 SSL_CERT_PATH가 설정되지 않았습니다.');
+    process.exit(1);
+  }
+
+  try {
+    const privateKey = fs.readFileSync(path.resolve(sslKeyPath), 'utf8');
+    const certificate = fs.readFileSync(path.resolve(sslCertPath), 'utf8');
+    
+    const credentials = { key: privateKey, cert: certificate };
+    server = https.createServer(credentials, app);
+    logger.info('HTTPS 서버로 시작됩니다.');
+  } catch (error) {
+    logger.error('SSL 인증서 로드 실패:', error.message);
+    process.exit(1);
+  }
+} else {
+  server = http.createServer(app);
+  logger.info('HTTP 서버로 시작됩니다.');
+}
 
 // CORS 설정
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'];
@@ -62,6 +94,18 @@ const questData = {
       contractAddress: process.env.BASESEPOLIA_KKCOIN_ADDRESS || '0x0000000000000000000000000000000000000000',
       network: 'basesepolia',
       minAmount: '5'
+    },
+    {
+      id: '7',
+      projectName: 'KK',
+      questName: 'Hold KK Token on BaseSepolia Network #2',
+      description: 'Hold minimum 30 KK tokens in your wallet on Base Sepolia network',
+      reward: { amount: 30, token: 'KK' },
+      isCompleted: false,
+      canWithdraw: false,
+      contractAddress: process.env.BASESEPOLIA_KKCOIN_ADDRESS || '0x0000000000000000000000000000000000000000',
+      network: 'basesepolia',
+      minAmount: '30'
     }
   ],
   'lootpang-curation': [
@@ -405,6 +449,10 @@ io.on('connection', (socket) => {
         response = await handleDepositCompleted(analysis, userId);
         break;
         
+      case 'DEPOSIT_SIGNATURE':
+        response = await handleDepositSignature(analysis, userId, originalData);
+        break;
+        
       default:
         response = {
           id: `agent-${Date.now()}`,
@@ -435,7 +483,7 @@ io.on('connection', (socket) => {
     const userCollateral = await blockchainService.getUserCollateral(userId);
     const requiredCollateral = llmAgent.calculateRequiredCollateral(loanAmount, loanToken);
     
-    logger.info(`대출 요청 분석 - 요청: ${loanAmount} ${loanToken}, 보유 담보: ${userCollateral} ETH, 필요 담보: ${requiredCollateral} ETH`);
+    logger.info(`Loan request analysis - Request: ${loanAmount} ${loanToken}, Current collateral: ${userCollateral} ETH, Required collateral: ${requiredCollateral} ETH`);
 
     if (parseFloat(userCollateral) < parseFloat(requiredCollateral)) {
       // 담보 부족
@@ -468,7 +516,7 @@ io.on('connection', (socket) => {
         dataToSign: signatureData
       };
     } catch (error) {
-      logger.error('서명 준비 오류:', error);
+      logger.error('Signature preparation error:', error);
       return {
         id: `agent-${Date.now()}`,
         text: `Sorry, there was an error preparing your loan. Please try again later.\nError: ${error.message}`,
@@ -531,7 +579,7 @@ io.on('connection', (socket) => {
 
     // 메시지에서 트랜잭션 해시 추출 시도
     const txHash = llmAgent.extractTransactionHash(originalMessage);
-    logger.info(`대출 상태 확인 - 사용자: ${userId}, 추출된 TX: ${txHash}`);
+    logger.info(`Loan status check - User: ${userId}, Extracted TX: ${txHash}`);
 
     const statusResult = await blockchainService.checkLoanStatus(userId, txHash);
     
@@ -602,7 +650,7 @@ io.on('connection', (socket) => {
     const { depositAmount } = analysis.context || {};
     const currentCollateral = await blockchainService.getUserCollateral(userId);
     
-    logger.info(`구체적 금액 예치 요청: ${userId}, 금액: ${depositAmount} ETH`);
+    logger.info(`Specific amount deposit request: ${userId}, Amount: ${depositAmount} ETH`);
 
     if (!depositAmount) {
       return {
@@ -612,19 +660,30 @@ io.on('connection', (socket) => {
       };
     }
 
-    const depositResult = await blockchainService.depositCollateral(userId, depositAmount);
+    try {
+      const signatureData = await blockchainService.prepareDepositSignature(depositAmount, userId);
+      
+      // 예치 서명 대기 상태로 변경
+      llmAgent.updateUserSession(userId, { 
+        state: 'AWAITING_DEPOSIT_SIGNATURE',
+        context: { depositAmount, requestedAmount: depositAmount }
+      });
 
-    // 예치 대기 상태로 변경
-    llmAgent.updateUserSession(userId, { 
-      state: 'AWAITING_DEPOSIT',
-      context: { depositAmount, requestedAmount: depositAmount }
-    });
-
-    return {
-      id: `agent-${Date.now()}`,
-      text: `📋 Deposit Instructions for ${depositAmount} ETH:\n\n${depositResult.message}\n\n💡 After depositing, say "I deposited ${depositAmount} ETH" or "deposit completed" to confirm.`,
-      isUser: false
-    };
+      return {
+        id: `agent-${Date.now()}`,
+        text: `📋 Ready to deposit ${depositAmount} ETH as collateral.\n\nPlease sign the transaction in MetaMask to proceed with the deposit.`,
+        isUser: false,
+        action: 'AWAITING_SIGNATURE',
+        dataToSign: signatureData
+      };
+    } catch (error) {
+      logger.error('Collateral signature preparation error:', error);
+      return {
+        id: `agent-${Date.now()}`,
+        text: `Sorry, there was an error preparing your deposit. Please try again later.\nError: ${error.message}`,
+        isUser: false
+      };
+    }
   }
 
   // 담보 예치 완료 처리
@@ -637,7 +696,7 @@ io.on('connection', (socket) => {
       };
     }
 
-    logger.info(`예치 완료 확인: ${userId}`);
+    logger.info(`Deposit completion check: ${userId}`);
 
     // 현재 담보 잔액 확인
     const currentCollateral = await blockchainService.getUserCollateral(userId);
@@ -670,7 +729,7 @@ io.on('connection', (socket) => {
             dataToSign: signatureData
           };
         } catch (error) {
-          logger.error('대출 서명 준비 오류:', error);
+          logger.error('Loan signature preparation error:', error);
           return {
             id: `agent-${Date.now()}`,
             text: `✅ Deposit confirmed! Current collateral: ${currentCollateral} ETH\n\n❌ However, there was an error preparing your loan. Please try requesting the loan again.`,
@@ -696,14 +755,58 @@ io.on('connection', (socket) => {
     }
   }
 
+  // 담보 서명 제출 처리
+  async function handleDepositSignature(analysis, userId, originalData) {
+    const result = await blockchainService.executeDepositWithSignature(
+      originalData.text, 
+      userId,
+      originalData.signatureData
+    );
+    
+    if (result.success) {
+      // 예치 성공 후 이전 대출 요청이 있었는지 확인
+      const session = llmAgent.getUserSession(userId);
+      const { loanAmount, loanToken, requiredCollateral } = session.context || {};
+      
+      if (loanAmount && loanToken) {
+        // 담보 확인 후 자동으로 대출 진행
+        const currentCollateral = await blockchainService.getUserCollateral(userId);
+        if (parseFloat(currentCollateral) >= parseFloat(requiredCollateral || '0.01')) {
+          llmAgent.updateUserSession(userId, { 
+            state: 'READY_FOR_LOAN',
+            context: { ...session.context, depositCompleted: true }
+          });
+        } else {
+          llmAgent.updateUserSession(userId, { state: 'IDLE', context: {} });
+        }
+      } else {
+        llmAgent.updateUserSession(userId, { state: 'IDLE', context: {} });
+      }
+    } else {
+      llmAgent.updateUserSession(userId, { state: 'IDLE' });
+    }
+    
+    const responseText = result.success ? 
+      (result.message || `✅ Deposit processed successfully. Transaction hash: ${result.txHash}`) :
+      `❌ Deposit execution failed: ${result.error}`;
+    
+    return {
+      id: `agent-${Date.now()}`,
+      text: responseText,
+      isUser: false
+    };
+  }
+
   socket.on('disconnect', () => {
-    logger.info(`클라이언트 연결 해제: ${socket.id}`);
+    logger.info(`Client disconnected: ${socket.id}`);
   });
 });
 
 const PORT = process.env.PORT || 3001;
+const protocol = useHttps ? 'https' : 'http';
+
 server.listen(PORT, () => {
-  logger.info(`LootPang LLM Agent 서버가 포트 ${PORT}에서 실행 중입니다.`);
+  logger.info(`LootPang LLM Agent server is running on ${protocol}://localhost:${PORT}`);
 });
 
 // 에러 핸들링

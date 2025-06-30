@@ -39,7 +39,8 @@ class BlockchainService {
     this.vaultABI = [
       "function getCollateral(address user) view returns (uint256)",
       "function getDebt(address user) view returns (uint256)",
-      "function nonces(address user) view returns (uint256)"
+      "function nonces(address user) view returns (uint256)",
+      "function depositCollateralWithSignature(address user, uint256 amount, uint256 nonce, uint256 deadline, bytes signature) payable"
     ];
 
     this.vaultSenderABI = [
@@ -149,7 +150,7 @@ class BlockchainService {
       if (parseFloat(userCollateral) === 0) {
         return {
           success: false,
-          error: '담보가 없습니다. 먼저 Sepolia 네트워크에서 ETH를 담보로 예치해주세요.'
+          error: 'No collateral found. Please deposit ETH as collateral on the Sepolia network first.'
         };
       }
 
@@ -350,7 +351,7 @@ class BlockchainService {
         success: true,
         txHash: tx.hash,
         blockNumber: receipt.blockNumber,
-        message: `✅ 코인 대여를 위한 크로스 체인 트랜잭션이 성공적으로 접수됐습니다.\n완료까지 약 20분이 소요됩니다.\n\n📋 트랜잭션 해시: ${tx.hash}\n🔗 CCIP 진행 상황 조회: https://ccip.chain.link/\n\n트랜잭션 해시를 복사해서 CCIP 사이트에서 진행 상황을 확인하세요!`
+        message: `✅ Cross-chain transaction for coin lending has been successfully submitted.\nIt will take approximately 20 minutes to complete.\n\n📋 Transaction Hash: ${tx.hash}\n🔗 Check CCIP progress: https://ccip.chain.link/\n\nCopy the transaction hash and check the progress on the CCIP site!`
       };
 
     } catch (error) {
@@ -540,35 +541,221 @@ class BlockchainService {
     }
   }
 
-  // 담보 예치 함수
-  async depositCollateral(userAddress, ethAmount) {
+  // 담보 예치를 위한 서명 준비
+  async prepareDepositSignature(ethAmount, userAddress = '0x0000000000000000000000000000000000000000') {
     try {
-      logger.info(`담보 예치 시작: ${userAddress}, ${ethAmount} ETH`);
+      logger.info('담보 예치 서명 준비 시작:', { ethAmount, userAddress });
 
-      if (!ethers.isAddress(userAddress)) {
-        throw new Error('유효하지 않은 지갑 주소입니다.');
+      // 유효한 이더리움 주소인지 확인
+      if (!userAddress || userAddress === 'anonymous' || !ethers.isAddress(userAddress)) {
+        logger.warn('유효하지 않은 사용자 주소, 기본값 사용:', userAddress);
+        userAddress = '0x0000000000000000000000000000000000000000';
       }
 
-      const amount = ethers.parseEther(ethAmount.toString());
+      const depositAmount = ethers.parseEther(ethAmount.toString());
       
-      // Sepolia Vault 컨트랙트 연결
+      // Sepolia 네트워크에서 현재 nonce 조회
       const sepoliaVault = new ethers.Contract(
         this.contractAddresses.sepoliaVault,
         this.vaultABI,
         this.sepoliaProvider
       );
+      
+      const userNonce = await sepoliaVault.nonces(userAddress);
+      logger.info(`사용자 현재 nonce (Sepolia): ${userNonce.toString()}`);
+      
+      const deadline = Math.floor(Date.now() / 1000) + 3600; // 1시간 후
 
-      // 사용자가 직접 담보를 예치해야 하므로 가이드 제공
+      // EIP-712 도메인 (Sepolia 네트워크)
+      const domain = {
+        name: "VaultLending",
+        version: "1",
+        chainId: 11155111, // Sepolia
+        verifyingContract: this.contractAddresses.sepoliaVault
+      };
+
+      // EIP-712 타입
+      const types = {
+        DepositCollateral: [
+          { name: "user", type: "address" },
+          { name: "amount", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      };
+
+      // EIP-712 값
+      const value = {
+        user: userAddress,
+        amount: depositAmount.toString(),
+        nonce: userNonce.toString(),
+        deadline: deadline
+      };
+
+      logger.info('담보 예치 서명 데이터 준비 완료:', { domain, types, value });
+
       return {
-        success: true,
-        message: `To deposit ${ethAmount} ETH as collateral:\n\n1. Switch MetaMask to Sepolia network\n2. Send ${ethAmount} ETH to Sepolia Vault contract\n3. Contract address: ${this.contractAddresses.sepoliaVault}\n4. Use the deposit function or send ETH directly\n\nOnce deposited, I'll be able to process your loan request.`,
-        contractAddress: this.contractAddresses.sepoliaVault,
-        amount: ethAmount,
-        network: 'Sepolia'
+        domain,
+        types,
+        value,
+        metadata: {
+          amount: ethAmount.toString(),
+          deadline: deadline,
+          nonce: userNonce.toString(),
+          network: 'Sepolia',
+          contractAddress: this.contractAddresses.sepoliaVault
+        }
       };
 
     } catch (error) {
-      logger.error('담보 예치 준비 중 오류:', error);
+      logger.error('담보 예치 서명 준비 중 오류:', error);
+      throw error;
+    }
+  }
+
+  // 서명을 통한 담보 예치 실행
+  async executeDepositWithSignature(signature, userAddress = '0x0000000000000000000000000000000000000000', signatureData = null) {
+    try {
+      logger.info('서명을 통한 담보 예치 실행 시작:', { signature: signature.substring(0, 10) + '...', userAddress });
+
+      // 서명이 유효한지 확인
+      if (!signature || !signature.startsWith('0x')) {
+        throw new Error('유효하지 않은 서명입니다.');
+      }
+
+      // 유효한 이더리움 주소인지 확인
+      if (!userAddress || userAddress === 'anonymous' || !ethers.isAddress(userAddress)) {
+        logger.warn('유효하지 않은 사용자 주소, 기본값 사용:', userAddress);
+        userAddress = '0x0000000000000000000000000000000000000000';
+      }
+
+      // 서명 데이터에서 파라미터 추출
+      let amount, nonce, deadline;
+      
+      if (signatureData && signatureData.value) {
+        amount = BigInt(signatureData.value.amount.toString());
+        deadline = parseInt(signatureData.value.deadline.toString());
+        nonce = BigInt(signatureData.value.nonce.toString());
+        
+        logger.info('서명 데이터에서 파라미터 추출:', {
+          amount: ethers.formatEther(amount) + ' ETH',
+          nonce: nonce.toString(),
+          deadline: new Date(deadline * 1000).toISOString()
+        });
+      } else {
+        throw new Error('서명 데이터가 필요합니다.');
+      }
+
+      // Sepolia Vault 컨트랙트 연결
+      const sepoliaVault = new ethers.Contract(
+        this.contractAddresses.sepoliaVault,
+        this.vaultABI,
+        this.sepoliaSigner
+      );
+
+      // 발신자 ETH 잔액 확인
+      const senderBalance = await this.sepoliaProvider.getBalance(this.sepoliaSigner.address);
+      logger.info(`발신자 ETH 잔액: ${ethers.formatEther(senderBalance)} ETH`);
+
+      // 서명 검증
+      try {
+        const domain = {
+          name: "VaultLending",
+          version: "1",
+          chainId: 11155111, // Sepolia
+          verifyingContract: this.contractAddresses.sepoliaVault
+        };
+
+        const types = {
+          DepositCollateral: [
+            { name: "user", type: "address" },
+            { name: "amount", type: "uint256" },
+            { name: "nonce", type: "uint256" },
+            { name: "deadline", type: "uint256" }
+          ]
+        };
+
+        const value = {
+          user: userAddress,
+          amount: amount.toString(),
+          nonce: nonce.toString(),
+          deadline: deadline
+        };
+
+        logger.info('서명 검증용 데이터:', {
+          domain,
+          types,
+          value,
+          signature: signature.substring(0, 20) + '...'
+        });
+
+        const recoveredAddress = ethers.verifyTypedData(domain, types, value, signature);
+        logger.info('서명 검증:', {
+          expectedUser: userAddress,
+          recoveredUser: recoveredAddress,
+          signatureValid: recoveredAddress.toLowerCase() === userAddress.toLowerCase()
+        });
+
+        if (recoveredAddress.toLowerCase() !== userAddress.toLowerCase()) {
+          return {
+            success: false,
+            error: '서명이 유효하지 않습니다. 다시 서명해주세요.'
+          };
+        }
+      } catch (verifyError) {
+        logger.error('서명 검증 실패:', verifyError);
+        return {
+          success: false,
+          error: '서명 검증 중 오류가 발생했습니다.'
+        };
+      }
+
+      logger.info('담보 예치 트랜잭션 시작...');
+      
+      // 트랜잭션 파라미터 최종 확인
+      logger.info('최종 트랜잭션 파라미터:', {
+        user: userAddress,
+        amount: amount.toString() + ' wei (' + ethers.formatEther(amount) + ' ETH)',
+        nonce: nonce.toString(),
+        deadline: deadline + ' (' + new Date(deadline * 1000).toISOString() + ')',
+        signature: signature.substring(0, 20) + '...',
+        contract: this.contractAddresses.sepoliaVault
+      });
+
+      // 담보 예치 실행 (서명된 트랜잭션)
+      const tx = await sepoliaVault.depositCollateralWithSignature(
+        userAddress,
+        amount,
+        nonce,
+        deadline,
+        signature,
+        {
+          value: amount, // ETH 전송
+          gasLimit: 200000
+        }
+      );
+
+      logger.info(`담보 예치 트랜잭션 해시: ${tx.hash}`);
+
+      // 사용자 트랜잭션 추적에 추가
+      this.addUserTransaction(userAddress, tx.hash, 'DEPOSIT', ethers.formatEther(amount));
+
+      // 트랜잭션 확인 대기
+      const receipt = await tx.wait();
+      logger.info(`담보 예치 트랜잭션 확인됨! 블록: ${receipt.blockNumber}`);
+
+      // 트랜잭션 상태 업데이트
+      this.updateUserTransaction(userAddress, tx.hash, 'COMPLETED');
+
+      return {
+        success: true,
+        txHash: tx.hash,
+        blockNumber: receipt.blockNumber,
+        message: `✅ Collateral deposit completed successfully!\n\n📋 Transaction Hash: ${tx.hash}\n💰 Deposited Amount: ${ethers.formatEther(amount)} ETH\n🔗 Check on Sepolia Explorer.\n\nYou can now request a loan!`
+      };
+
+    } catch (error) {
+      logger.error('담보 예치 실행 중 오류:', error);
       return {
         success: false,
         error: error.message
@@ -659,9 +846,9 @@ class BlockchainService {
   }
 
   // 실제 대출 완료 여부 확인 (블록체인 기반)
-  async checkActualLoanCompletion(userAddress, txHash = null) {
+  async checkActualLoanCompletion(userAddress, txHash = null, expectedLoanAmount = null) {
     try {
-      logger.info(`실제 대출 완료 여부 확인: ${userAddress}, TX: ${txHash}`);
+      logger.info(`실제 대출 완료 여부 확인: ${userAddress}, TX: ${txHash}, 예상 대출량: ${expectedLoanAmount}`);
 
       // 1. 현재 사용자의 담보 및 부채 상태 확인
       const [currentCollateral, currentDebt] = await Promise.all([
@@ -675,32 +862,59 @@ class BlockchainService {
       const kkcoinBalance = await this.getKKCoinBalance(userAddress);
       logger.info(`KKCoin 잔액: ${kkcoinBalance}`);
 
-      // 3. 특정 트랜잭션이 있는 경우 해당 트랜잭션 결과 확인
-      let txResult = null;
-      if (txHash) {
-        txResult = await this.checkCCIPTransactionResult(txHash, userAddress);
+      // 3. 간단한 잔액 기반 판단
+      const currentBalance = parseFloat(kkcoinBalance);
+      const debtAmount = parseFloat(currentDebt);
+      
+      // 부채가 있고 KKCoin 잔액이 있으면 대출이 완료된 것으로 판단
+      if (debtAmount > 0 && currentBalance > 0) {
+        return {
+          success: true,
+          status: 'COMPLETED',
+          message: `✅ Your loan has been completed!\n\n💰 Current KKCoin Balance: ${kkcoinBalance}\n📊 Total Debt: ${currentDebt} KKCoin\n🔒 Collateral: ${currentCollateral} ETH\n\nYour loan has been successfully processed!`,
+          data: {
+            kkcoinBalance: kkcoinBalance,
+            debt: currentDebt,
+            collateral: currentCollateral,
+            isCompleted: true
+          }
+        };
       }
-
-      // 4. 사용자의 최근 트랜잭션 히스토리에서 대출 관련 이벤트 확인
-      const recentLoanEvents = await this.getRecentLoanEvents(userAddress);
-
-      // 5. 종합 판단
-      return this.determineLoanStatus({
-        userAddress,
-        currentCollateral,
-        currentDebt,
-        kkcoinBalance,
-        txResult,
-        recentLoanEvents,
-        requestedTxHash: txHash
-      });
+      
+      // 부채는 있지만 KKCoin 잔액이 없는 경우
+      if (debtAmount > 0 && currentBalance === 0) {
+        return {
+          success: true,
+          status: 'PROCESSING',
+          message: `⏳ Your loan is being processed...\n\n📊 Debt has been recorded: ${currentDebt} KKCoin\n💰 KKCoin Balance: ${kkcoinBalance}\n\nPlease wait for the CCIP cross-chain transfer to complete.`,
+          data: {
+            kkcoinBalance: kkcoinBalance,
+            debt: currentDebt,
+            collateral: currentCollateral,
+            isCompleted: false
+          }
+        };
+      }
+      
+      // 부채도 잔액도 없는 경우
+      return {
+        success: true,
+        status: 'NOT_STARTED',
+        message: `❌ No loan has been started yet.\n\n💰 KKCoin Balance: ${kkcoinBalance}\n📊 Debt: ${currentDebt} KKCoin\n🔒 Collateral: ${currentCollateral} ETH\n\nPlease request a loan to get started.`,
+        data: {
+          kkcoinBalance: kkcoinBalance,
+          debt: currentDebt,
+          collateral: currentCollateral,
+          isCompleted: false
+        }
+      };
 
     } catch (error) {
       logger.error('실제 대출 완료 여부 확인 중 오류:', error);
       return {
         success: false,
         status: 'ERROR',
-        message: `Unable to check loan status: ${error.message}`
+        message: `An error occurred while checking loan status: ${error.message}`
       };
     }
   }
@@ -812,38 +1026,11 @@ class BlockchainService {
     }
   }
 
-  // 최근 대출 이벤트 확인
+  // 최근 대출 이벤트 확인 (간소화)
   async getRecentLoanEvents(userAddress, hoursBack = 2) {
     try {
-      const baseVault = new ethers.Contract(
-        this.contractAddresses.baseVault,
-        this.vaultABI,
-        this.baseProvider
-      );
-
-      const currentBlock = await this.baseProvider.getBlockNumber();
-      const blocksBack = Math.floor(hoursBack * 60 * 60 / 2); // 2초당 1블록 가정
-      const fromBlock = Math.max(currentBlock - blocksBack, 0);
-
-      const [loanEvents, repayEvents] = await Promise.all([
-        baseVault.queryFilter(baseVault.filters.LoanIssued(userAddress), fromBlock, currentBlock),
-        baseVault.queryFilter(baseVault.filters.LoanRepaid(userAddress), fromBlock, currentBlock)
-      ]);
-
-      return {
-        loans: loanEvents.map(event => ({
-          txHash: event.transactionHash,
-          blockNumber: event.blockNumber,
-          amount: ethers.formatEther(event.args.amount),
-          timestamp: event.blockNumber // 실제로는 블록 타임스탬프 필요
-        })),
-        repayments: repayEvents.map(event => ({
-          txHash: event.transactionHash,
-          blockNumber: event.blockNumber,
-          amount: ethers.formatEther(event.args.amount),
-          timestamp: event.blockNumber
-        }))
-      };
+      logger.info(`최근 대출 이벤트 확인 생략 - 간단한 잔액 기반 판단 사용`);
+      return { loans: [], repayments: [] };
     } catch (error) {
       logger.error('최근 대출 이벤트 확인 오류:', error);
       return { loans: [], repayments: [] };
