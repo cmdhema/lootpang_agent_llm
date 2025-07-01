@@ -425,9 +425,7 @@ io.on('connection', (socket) => {
         response = await handleBorrowRequest(analysis, userId, roomId);
         break;
         
-      case 'CONFIRM_DEPOSIT':
-        response = await handleDepositConfirmation(analysis, userId);
-        break;
+
         
       case 'CHECK_LOAN_STATUS':
         response = await handleLoanStatusCheck(userId, originalData.text);
@@ -447,10 +445,6 @@ io.on('connection', (socket) => {
         
       case 'DEPOSIT_COMPLETED':
         response = await handleDepositCompleted(analysis, userId);
-        break;
-        
-      case 'DEPOSIT_SIGNATURE':
-        response = await handleDepositSignature(analysis, userId, originalData);
         break;
         
       default:
@@ -486,15 +480,18 @@ io.on('connection', (socket) => {
     logger.info(`Loan request analysis - Request: ${loanAmount} ${loanToken}, Current collateral: ${userCollateral} ETH, Required collateral: ${requiredCollateral} ETH`);
 
     if (parseFloat(userCollateral) < parseFloat(requiredCollateral)) {
-      // 담보 부족
+      // 담보 부족 - 직접 deposit 안내
+      const shortfall = (parseFloat(requiredCollateral) - parseFloat(userCollateral)).toFixed(4);
+      const vaultAddress = process.env.SEPOLIA_VAULT_CONTRACT || 'N/A';
+      
       llmAgent.updateUserSession(userId, { 
-        state: 'AWAITING_DEPOSIT_CONFIRMATION',
-        context: { loanAmount, loanToken, requiredCollateral }
+        state: 'AWAITING_DEPOSIT',
+        context: { loanAmount, loanToken, requiredCollateral, depositAmount: shortfall }
       });
 
       return {
         id: `agent-${Date.now()}`,
-        text: `To borrow ${loanAmount} ${loanToken}, you need at least ${requiredCollateral} ETH as collateral.\n\nYour current collateral: ${userCollateral} ETH\nRequired collateral: ${requiredCollateral} ETH\nShortfall: ${(parseFloat(requiredCollateral) - parseFloat(userCollateral)).toFixed(4)} ETH\n\nWould you like to deposit more collateral? Reply "yes" to proceed with deposit instructions.`,
+        text: `❌ **Insufficient Collateral for Loan**\n\n🎯 **Loan Request:** ${loanAmount} ${loanToken.toUpperCase()}\n💰 **Your Current Collateral:** ${userCollateral} ETH\n📊 **Required Collateral:** ${requiredCollateral} ETH\n⚠️ **Shortfall:** ${shortfall} ETH\n\n📋 **To proceed with your loan, please deposit at least ${shortfall} ETH:**\n\n**Steps to deposit:**\n1. 🦊 Open MetaMask\n2. 🔗 Switch to **Sepolia Network**\n3. 💸 Send **${shortfall} ETH** (or more) to:\n   \`${vaultAddress}\`\n4. ✅ Wait for transaction confirmation\n5. 🔄 Say "borrow ${loanAmount} ${loanToken}" again to retry\n\n💡 **Tips:**\n- You can deposit more than ${shortfall} ETH for future loans\n- Higher collateral ratio = safer lending\n- Make sure you have enough ETH for gas fees\n\n🚀 After depositing, simply request your loan again!`,
         isUser: false
       };
     }
@@ -510,7 +507,7 @@ io.on('connection', (socket) => {
 
       return {
         id: `agent-${Date.now()}`,
-        text: `Great! You have sufficient collateral (${userCollateral} ETH) to borrow ${loanAmount} ${loanToken}.\n\nPlease sign the transaction in MetaMask to proceed.`,
+        text: `✅ **Loan Approved!**\n\n🎯 **Loan Details:**\n- Amount: ${loanAmount} ${loanToken.toUpperCase()}\n- Your Collateral: ${userCollateral} ETH\n- Required Collateral: ${requiredCollateral} ETH\n- Collateral Ratio: ${((parseFloat(userCollateral) / parseFloat(requiredCollateral)) * 100).toFixed(1)}%\n\n🔐 **Please sign the transaction in MetaMask to proceed with your loan.**\n\n💡 Your collateral is safely held in the Vault contract during the loan period.`,
         isUser: false,
         action: 'AWAITING_SIGNATURE',
         dataToSign: signatureData
@@ -525,47 +522,7 @@ io.on('connection', (socket) => {
     }
   }
 
-  // 담보 예치 확인 처리
-  async function handleDepositConfirmation(analysis, userId) {
-    const session = llmAgent.getUserSession(userId);
-    const { requiredCollateral, loanAmount, loanToken } = session.context || {};
-    
-    logger.info('담보 예치 확인 처리:', { userId, context: session.context });
-    
-    if (!requiredCollateral) {
-      return {
-        id: `agent-${Date.now()}`,
-        text: 'I don\'t have the context for your deposit. Please start over with your loan request.',
-        isUser: false
-      };
-    }
 
-    const currentCollateral = await blockchainService.getUserCollateral(userId);
-    const shortfall = Math.max(parseFloat(requiredCollateral) - parseFloat(currentCollateral), 0);
-    
-    if (shortfall <= 0) {
-      // 이미 충분한 담보가 있음 - 대출 진행
-      return {
-        id: `agent-${Date.now()}`,
-        text: `Great! You now have sufficient collateral (${currentCollateral} ETH) to borrow ${loanAmount} ${loanToken}. Let me prepare your loan signature.`,
-        isUser: false
-      };
-    }
-
-    const depositResult = await blockchainService.depositCollateral(userId, shortfall.toFixed(4));
-
-    // 예치 대기 상태로 변경
-    llmAgent.updateUserSession(userId, { 
-      state: 'AWAITING_DEPOSIT',
-      context: { ...session.context, depositAmount: shortfall.toFixed(4) }
-    });
-
-    return {
-      id: `agent-${Date.now()}`,
-      text: depositResult.message + `\n\n💡 After depositing, say "I deposited" or "deposit completed" to continue with your ${loanAmount} ${loanToken} loan.`,
-      isUser: false
-    };
-  }
 
   // 대출 상태 확인 처리
   async function handleLoanStatusCheck(userId, originalMessage = '') {
@@ -629,10 +586,11 @@ io.on('connection', (socket) => {
     }
 
     const currentCollateral = await blockchainService.getUserCollateral(userId);
+    const vaultAddress = process.env.SEPOLIA_VAULT_CONTRACT || 'N/A';
     
     return {
       id: `agent-${Date.now()}`,
-      text: `Current collateral: ${currentCollateral} ETH\n\nHow to deposit collateral:\n\n1. Switch MetaMask to Sepolia network\n2. Deposit ETH to Sepolia Vault contract\n3. Contract address: ${process.env.SEPOLIA_VAULT_CONTRACT || 'N/A'}\n\nOr you can use scripts in the lootpang_vault folder to deposit collateral.\n\nAfter depositing, you can request a loan by saying "borrow [amount] [token]".`,
+      text: `💰 **Current Collateral Status**\n\nYour current collateral: **${currentCollateral} ETH**\n\n📋 **How to deposit collateral:**\n\n1. 🦊 Open MetaMask\n2. 🔗 Switch to **Sepolia Network**\n3. 💸 Send ETH directly to Vault contract:\n   \`${vaultAddress}\`\n4. ✅ Wait for transaction confirmation\n\n💡 **Tips:**\n- You can deposit any amount of ETH\n- Higher collateral = larger loan capacity\n- Make sure you have enough ETH for gas fees\n\n🚀 After depositing, you can request a loan by saying "borrow [amount] [token]".\n\n📝 Or specify an amount like "deposit 0.1 ETH" for detailed instructions.`,
       isUser: false
     };
   }
@@ -660,30 +618,19 @@ io.on('connection', (socket) => {
       };
     }
 
-    try {
-      const signatureData = await blockchainService.prepareDepositSignature(depositAmount, userId);
-      
-      // 예치 서명 대기 상태로 변경
-      llmAgent.updateUserSession(userId, { 
-        state: 'AWAITING_DEPOSIT_SIGNATURE',
-        context: { depositAmount, requestedAmount: depositAmount }
-      });
+    // 예치 대기 상태로 변경
+    llmAgent.updateUserSession(userId, { 
+      state: 'AWAITING_DEPOSIT',
+      context: { depositAmount, requestedAmount: depositAmount }
+    });
 
-      return {
-        id: `agent-${Date.now()}`,
-        text: `📋 Ready to deposit ${depositAmount} ETH as collateral.\n\nPlease sign the transaction in MetaMask to proceed with the deposit.`,
-        isUser: false,
-        action: 'AWAITING_SIGNATURE',
-        dataToSign: signatureData
-      };
-    } catch (error) {
-      logger.error('Collateral signature preparation error:', error);
-      return {
-        id: `agent-${Date.now()}`,
-        text: `Sorry, there was an error preparing your deposit. Please try again later.\nError: ${error.message}`,
-        isUser: false
-      };
-    }
+    const vaultAddress = process.env.SEPOLIA_VAULT_CONTRACT || 'N/A';
+
+    return {
+      id: `agent-${Date.now()}`,
+      text: `📋 **Deposit Instructions**\n\nYou want to deposit **${depositAmount} ETH** as collateral.\n\nYour current collateral: **${currentCollateral} ETH**\n\n**Steps to deposit:**\n1. 🦊 Open MetaMask\n2. 🔗 Switch to **Sepolia Network**\n3. 💸 Send **${depositAmount} ETH** to:\n   \`${vaultAddress}\`\n4. ✅ Wait for transaction confirmation\n\n💡 After depositing, say "I deposited" or "deposit completed" to continue.\n\n⚠️ **Important:** Make sure you're on Sepolia testnet and have enough ETH for gas fees!`,
+      isUser: false
+    };
   }
 
   // 담보 예치 완료 처리
@@ -755,47 +702,7 @@ io.on('connection', (socket) => {
     }
   }
 
-  // 담보 서명 제출 처리
-  async function handleDepositSignature(analysis, userId, originalData) {
-    const result = await blockchainService.executeDepositWithSignature(
-      originalData.text, 
-      userId,
-      originalData.signatureData
-    );
-    
-    if (result.success) {
-      // 예치 성공 후 이전 대출 요청이 있었는지 확인
-      const session = llmAgent.getUserSession(userId);
-      const { loanAmount, loanToken, requiredCollateral } = session.context || {};
-      
-      if (loanAmount && loanToken) {
-        // 담보 확인 후 자동으로 대출 진행
-        const currentCollateral = await blockchainService.getUserCollateral(userId);
-        if (parseFloat(currentCollateral) >= parseFloat(requiredCollateral || '0.01')) {
-          llmAgent.updateUserSession(userId, { 
-            state: 'READY_FOR_LOAN',
-            context: { ...session.context, depositCompleted: true }
-          });
-        } else {
-          llmAgent.updateUserSession(userId, { state: 'IDLE', context: {} });
-        }
-      } else {
-        llmAgent.updateUserSession(userId, { state: 'IDLE', context: {} });
-      }
-    } else {
-      llmAgent.updateUserSession(userId, { state: 'IDLE' });
-    }
-    
-    const responseText = result.success ? 
-      (result.message || `✅ Deposit processed successfully. Transaction hash: ${result.txHash}`) :
-      `❌ Deposit execution failed: ${result.error}`;
-    
-    return {
-      id: `agent-${Date.now()}`,
-      text: responseText,
-      isUser: false
-    };
-  }
+
 
   socket.on('disconnect', () => {
     logger.info(`Client disconnected: ${socket.id}`);

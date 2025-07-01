@@ -143,9 +143,10 @@ AVAILABLE ACTIONS:
 - DEPOSIT: User asking about deposit process (general)
 - DEPOSIT_WITH_AMOUNT: User wants to deposit specific ETH amount
 - DEPOSIT_COMPLETED: User notifying deposit completion
+- DEPOSIT_SIGNATURE: User providing deposit signature (0x...)
 - CHECK_LOAN_STATUS: User asking about loan completion status
 - CONFIRM_DEPOSIT: User confirming they want to deposit (only when state is AWAITING_DEPOSIT_CONFIRMATION)
-- SIGNATURE: User providing signature (0x...)
+- SIGNATURE: User providing loan signature (0x...)
 - GENERAL: General conversation or unclear intent
 
 AMOUNT EXTRACTION RULES:
@@ -357,7 +358,17 @@ Always be helpful, clear, and guide users through the lending process step by st
     if (state === 'AWAITING_SIGNATURE' && text.startsWith('0x') && text.length > 50) {
       return {
         action: 'SIGNATURE',
-        response: 'Processing your signature...',
+        response: 'Processing your loan signature...',
+        confidence: 0.95,
+        context: context
+      };
+    }
+    
+    // 3.5. 담보 예치 서명 대기 상태에서 서명 데이터
+    if (state === 'AWAITING_DEPOSIT_SIGNATURE' && text.startsWith('0x') && text.length > 50) {
+      return {
+        action: 'DEPOSIT_SIGNATURE',
+        response: 'Processing your deposit signature...',
         confidence: 0.95,
         context: context
       };
