@@ -489,11 +489,11 @@ io.on('connection', (socket) => {
         context: { loanAmount, loanToken, requiredCollateral, depositAmount: shortfall }
       });
 
-      return {
-        id: `agent-${Date.now()}`,
-        text: `❌ **Insufficient Collateral for Loan**\n\n🎯 **Loan Request:** ${loanAmount} ${loanToken.toUpperCase()}\n💰 **Your Current Collateral:** ${userCollateral} ETH\n📊 **Required Collateral:** ${requiredCollateral} ETH\n⚠️ **Shortfall:** ${shortfall} ETH\n\n📋 **To proceed with your loan, please deposit at least ${shortfall} ETH:**\n\n**Steps to deposit:**\n1. 🦊 Open MetaMask\n2. 🔗 Switch to **Sepolia Network**\n3. 💸 Send **${shortfall} ETH** (or more) to:\n   \`${vaultAddress}\`\n4. ✅ Wait for transaction confirmation\n5. 🔄 Say "borrow ${loanAmount} ${loanToken}" again to retry\n\n💡 **Tips:**\n- You can deposit more than ${shortfall} ETH for future loans\n- Higher collateral ratio = safer lending\n- Make sure you have enough ETH for gas fees\n\n🚀 After depositing, simply request your loan again!`,
-        isUser: false
-      };
+          return {
+      id: `agent-${Date.now()}`,
+      text: `❌ **Insufficient Collateral for Loan**\n\n🎯 **Loan Request:** ${loanAmount} ${loanToken.toUpperCase()}\n💰 **Your Current Collateral:** ${userCollateral} ETH\n📊 **Required Collateral:** ${requiredCollateral} ETH\n⚠️ **Shortfall:** ${shortfall} ETH\n\n📋 **To proceed with your loan, please deposit at least ${shortfall} ETH:**\n\n**Method: Direct Contract Call**\n1. 🦊 Open MetaMask\n2. 💸 Send **${shortfall} ETH** to: \`${vaultAddress}\`\n3. 📝 **Important:** Set the "Data" field to: \`0x6f758140\`\n4. ⛽ Use sufficient gas limit (e.g., 100,000)\n\n💡 **After depositing:**\n- Wait for transaction confirmation\n- Say "borrow ${loanAmount} ${loanToken}" again to retry\n\n🚀 `,
+      isUser: false
+    };
     }
 
     // 담보 충분 - 서명 진행
@@ -534,17 +534,79 @@ io.on('connection', (socket) => {
       };
     }
 
-    // 메시지에서 트랜잭션 해시 추출 시도
-    const txHash = llmAgent.extractTransactionHash(originalMessage);
-    logger.info(`Loan status check - User: ${userId}, Extracted TX: ${txHash}`);
+    try {
+      // 현재 사용자의 담보 및 부채 정보 조회
+      const userCollateral = await blockchainService.getUserCollateral(userId);
+      const userDebt = await blockchainService.getUserDebt(userId);
+      
+      // 담보 비율 계산 (1 KK Token = 0.01 ETH 담보 필요)
+      const collateralRatio = 0.01; // 1 KK Token당 필요한 ETH
+      const maxBorrowableKK = Math.floor(parseFloat(userCollateral) / collateralRatio);
+      const availableBorrowKK = Math.max(0, maxBorrowableKK - parseFloat(userDebt));
+      
+      // 담보 활용률 계산
+      const collateralUtilization = parseFloat(userCollateral) > 0 ? 
+        ((parseFloat(userDebt) * collateralRatio) / parseFloat(userCollateral) * 100).toFixed(1) : 0;
+      
+      // 메시지에서 트랜잭션 해시 추출 시도
+      const txHash = llmAgent.extractTransactionHash(originalMessage);
+      logger.info(`Loan status check - User: ${userId}, Extracted TX: ${txHash}`);
 
-    const statusResult = await blockchainService.checkLoanStatus(userId, txHash);
-    
-    return {
-      id: `agent-${Date.now()}`,
-      text: statusResult.message || `Current status:\n- Status: ${statusResult.status}`,
-      isUser: false
-    };
+      // 기본 대출 상태 확인
+      const statusResult = await blockchainService.checkLoanStatus(userId, txHash);
+      
+      // 상세한 상태 메시지 구성
+      let statusMessage = `📊 **Your Lending Status**\n\n`;
+      
+      // 현재 포지션 정보
+      statusMessage += `💰 **Current Position:**\n`;
+      statusMessage += `• Collateral: **${userCollateral} ETH**\n`;
+      statusMessage += `• Current Debt: **${userDebt} KK Tokens**\n`;
+      statusMessage += `• Collateral Utilization: **${collateralUtilization}%**\n\n`;
+      
+      // 대출 가능량 정보
+      statusMessage += `🎯 **Borrowing Capacity:**\n`;
+      statusMessage += `• Maximum Borrowable: **${maxBorrowableKK} KK Tokens**\n`;
+      statusMessage += `• Available to Borrow: **${availableBorrowKK} KK Tokens**\n`;
+      
+      if (availableBorrowKK > 0) {
+        statusMessage += `\n✅ **You can borrow up to ${availableBorrowKK} more KK Tokens!**\n`;
+        statusMessage += `💡 Try: \`borrow ${Math.min(availableBorrowKK, 10)} kkcoin\``;
+      } else if (parseFloat(userDebt) > 0) {
+        statusMessage += `\n⚠️ **You've reached your borrowing limit.**\n`;
+        statusMessage += `💡 Deposit more ETH to increase capacity.`;
+      } else {
+        statusMessage += `\n🚀 **Ready to start borrowing!**\n`;
+        statusMessage += `💡 Try: \`borrow ${Math.min(maxBorrowableKK, 10)} kkcoin\``;
+      }
+      
+      // 담보 추가 권장사항
+      if (parseFloat(userCollateral) < 0.1) {
+        statusMessage += `\n\n📈 **Recommendation:**\n`;
+        statusMessage += `Consider depositing more ETH for larger borrowing capacity.\n`;
+        statusMessage += `• Deposit 0.1 ETH → Borrow up to 10 KK Tokens\n`;
+        statusMessage += `• Deposit 1.0 ETH → Borrow up to 100 KK Tokens`;
+      }
+      
+      // 기존 상태 결과가 있으면 추가
+      if (statusResult.message && statusResult.message !== `Current status:\n- Status: ${statusResult.status}`) {
+        statusMessage += `\n\n🔍 **Transaction Status:**\n${statusResult.message}`;
+      }
+      
+      return {
+        id: `agent-${Date.now()}`,
+        text: statusMessage,
+        isUser: false
+      };
+      
+    } catch (error) {
+      logger.error('Loan status check error:', error);
+      return {
+        id: `agent-${Date.now()}`,
+        text: `❌ **Error checking loan status.**\n\n🔍 **Details:**\n${error.message}\n\n🔄 **Please try:**\n1. Check your wallet connection\n2. Ensure you're on the correct network\n3. Try again in a moment`,
+        isUser: false
+      };
+    }
   }
 
   // 서명 제출 처리
@@ -590,7 +652,7 @@ io.on('connection', (socket) => {
     
     return {
       id: `agent-${Date.now()}`,
-      text: `💰 **Current Collateral Status**\n\nYour current collateral: **${currentCollateral} ETH**\n\n📋 **How to deposit collateral:**\n\n1. 🦊 Open MetaMask\n2. 🔗 Switch to **Sepolia Network**\n3. 💸 Send ETH directly to Vault contract:\n   \`${vaultAddress}\`\n4. ✅ Wait for transaction confirmation\n\n💡 **Tips:**\n- You can deposit any amount of ETH\n- Higher collateral = larger loan capacity\n- Make sure you have enough ETH for gas fees\n\n🚀 After depositing, you can request a loan by saying "borrow [amount] [token]".\n\n📝 Or specify an amount like "deposit 0.1 ETH" for detailed instructions.`,
+      text: `💰 **Current Collateral Status**\n\nYour current collateral: **${currentCollateral} ETH**\n\n📋 **How to deposit collateral:**\n\n**Method: Direct Transaction with Data**\n1. 🦊 Send ETH to: \`${vaultAddress}\`\n2. 📝 **Set Data field to:** \`0x6f758140\`\n3. ⛽ Use gas limit: 100,000+\n\n💡 **Important:** Don't just send ETH without calling the depositCollateral function!\n\n🚀 After depositing, you can request a loan by saying "borrow [amount] [token]".\n\n📝 Or specify an amount like "deposit 0.1 ETH" for detailed instructions.`,
       isUser: false
     };
   }
@@ -628,7 +690,7 @@ io.on('connection', (socket) => {
 
     return {
       id: `agent-${Date.now()}`,
-      text: `📋 **Deposit Instructions**\n\nYou want to deposit **${depositAmount} ETH** as collateral.\n\nYour current collateral: **${currentCollateral} ETH**\n\n**Steps to deposit:**\n1. 🦊 Open MetaMask\n2. 🔗 Switch to **Sepolia Network**\n3. 💸 Send **${depositAmount} ETH** to:\n   \`${vaultAddress}\`\n4. ✅ Wait for transaction confirmation\n\n💡 After depositing, say "I deposited" or "deposit completed" to continue.\n\n⚠️ **Important:** Make sure you're on Sepolia testnet and have enough ETH for gas fees!`,
+      text: `📋 **Deposit Instructions**\n\nYou want to deposit **${depositAmount} ETH** as collateral.\n\nYour current collateral: **${currentCollateral} ETH**\n\n**Method: Direct Transaction with Function Call**\n1. 🦊 Open MetaMask\n2. 💸 Send **${depositAmount} ETH** to: \`${vaultAddress}\`\n3. 📝 **Set Data field to:** \`0x6f758140\`\n4. ⛽ Use gas limit: 100,000+\n5. ✅ Confirm transaction\n\n💡 **After depositing:**\n- Wait for transaction confirmation\n- Say "I deposited" or "deposit completed" to continue\n\n⚠️ **Important:** Must call depositCollateral function, not just send ETH!`,
       isUser: false
     };
   }
