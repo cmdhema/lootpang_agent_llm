@@ -1,0 +1,39 @@
+{
+  "targetChannels": [
+    {
+      "username": "airdropinspector",
+      "id": -1001156966846,
+      "name": "Airdrop Inspector"
+    },
+    {
+      "username": "AirdropDetective",
+      "id": -1001390962936,
+      "name": "Airdrop Detective"
+    },
+    {
+      "username": "Airdrop",
+      "id": -1001191892125,
+      "name": "Airdrop"
+    }
+  ],
+  "notificationChannel": {
+    "username": "lootpang",
+    "id": -1002700598330,
+    "name": "내 알림 채널"
+  },
+  "keywords": [
+    "airdrop",
+    "에어드랍",
+    "giveaway",
+    "이벤트",
+    "무료",
+    "free",
+    "token",
+    "토큰"
+  ],
+  "settings": {
+    "enableForwarding": false,
+    "enableKeywordFilter": true,
+    "logAllMessages": false
+  }
+} 
