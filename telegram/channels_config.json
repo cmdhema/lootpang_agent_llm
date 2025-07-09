@@ -19,7 +19,8 @@
   "notificationChannel": {
     "username": "lootpang",
     "id": -1002700598330,
-    "name": "내 알림 채널"
+    "name": "내 알림 채널",
+    "token": "8171817849:AAHXDniLYHiwVyXoY9EhlvCO9ACP6-gJUCU"
   },
   "keywords": [
     "airdrop",
