@@ -11,13 +11,33 @@ class BlockchainService {
   }
 
   initializeProviders() {
-    // Sepolia 프로바이더
-    this.sepoliaProvider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
-    this.sepoliaSigner = new ethers.Wallet(process.env.SEPOLIA_PRIVATE_KEY, this.sepoliaProvider);
+    const sepoliaPrivateKey = process.env.SEPOLIA_PRIVATE_KEY;
+    const baseSepoliaPrivateKey = process.env.BASESEPOLIA_PRIVATE_KEY;
 
-    // Base Sepolia 프로바이더
-    this.baseProvider = new ethers.JsonRpcProvider(process.env.BASESEPOLIA_RPC_URL);
-    this.baseSigner = new ethers.Wallet(process.env.BASESEPOLIA_PRIVATE_KEY, this.baseProvider);
+    if (!sepoliaPrivateKey || sepoliaPrivateKey.trim() === '') {
+      throw new Error('SEPOLIA_PRIVATE_KEY가 .env 파일에 설정되지 않았습니다. 유효한 비공개 키를 추가해주세요.');
+    }
+    if (!baseSepoliaPrivateKey || baseSepoliaPrivateKey.trim() === '') {
+      throw new Error('BASESEPOLIA_PRIVATE_KEY가 .env 파일에 설정되지 않았습니다. 유효한 비공개 키를 추가해주세요.');
+    }
+
+    try {
+      // Sepolia 프로바이더
+      this.sepoliaProvider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+      this.sepoliaSigner = new ethers.Wallet(sepoliaPrivateKey, this.sepoliaProvider);
+    } catch (error) {
+      logger.error('Sepolia 서명자 초기화 실패:', error.message);
+      throw new Error(`유효하지 않은 SEPOLIA_PRIVATE_KEY입니다. 키가 '0x'로 시작하는 64자리 16진수 문자열인지 확인해주세요.`);
+    }
+
+    try {
+      // Base Sepolia 프로바이더
+      this.baseProvider = new ethers.JsonRpcProvider(process.env.BASESEPOLIA_RPC_URL);
+      this.baseSigner = new ethers.Wallet(baseSepoliaPrivateKey, this.baseProvider);
+    } catch (error) {
+      logger.error('Base Sepolia 서명자 초기화 실패:', error.message);
+      throw new Error(`유효하지 않은 BASESEPOLIA_PRIVATE_KEY입니다. 키가 '0x'로 시작하는 64자리 16진수 문자열인지 확인해주세요.`);
+    }
 
     logger.info('블록체인 프로바이더 초기화 완료');
   }
