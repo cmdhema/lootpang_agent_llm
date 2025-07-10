@@ -1,3 +1,11 @@
+console.log('--- Lootpang Agent 서버 스크립트 시작 ---');
+console.log(`현재 시간: ${new Date().toISOString()}`);
+console.log(`Node.js 버전: ${process.version}`);
+console.log(`현재 작업 디렉토리: ${process.cwd()}`);
+console.log(`실행 환경(NODE_ENV): ${process.env.NODE_ENV}`);
+
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const https = require('https');
@@ -7,7 +15,6 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
 
 const logger = require('./utils/logger');
 const LLMAgent = require('./services/llmAgent');
