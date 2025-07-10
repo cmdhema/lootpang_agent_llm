@@ -42,26 +42,42 @@ class TelegramService {
       return '알림을 보낼 퀘스트 정보가 없습니다.';
     }
 
+    const formatDt = (ts) => {
+      if (!ts) return 'N/A';
+      const date = new Date(ts * 1000);
+      const y = date.getFullYear().toString().slice(-2);
+      const m = (date.getMonth() + 1).toString().padStart(2, '0');
+      const d = date.getDate().toString().padStart(2, '0');
+      const h = date.getHours().toString().padStart(2, '0');
+      const min = date.getMinutes().toString().padStart(2, '0');
+      return `${y}-${m}-${d} ${h}:${min}`;
+    };
+
+    const startDate = formatDt(questData.start_time);
+    const endDate = formatDt(questData.end_time);
+
     const message = `
 🚀 **새로운 추천 퀘스트 알림** 🚀
 
+🏢 **프로젝트**: ${questData.space.name}
 ✨ **퀘스트**: ${questData.name}
-🏢 **프로젝트**: ${questData.space_alias}
+${questData.nft_contract_address ? `🔹 **보상**: NFT` : ''}
+${questData.user_token_amount > 0 && questData.token_decimal != null ? `🎁 **인당 보상**: $${Number(questData.user_token_amount) / Math.pow(10, Number(questData.token_decimal))} ${questData.token_symbol || ''}` : ''}
+${questData.cap > 0 ? `🔹 **총 인원**: ${questData.cap}명` : '🔹 **총 인원**: 무제한'}
 
-🔹 **퀘스트 유형**: ${questData.type}
+🔹 **퀘스트 유형**: ${questData.is_sns_only ? 'SNS 참여' : 'SNS 참여 및 비용이 없는 복합 퀘스트'}
 🔹 **분배 방식**: ${questData.distribution_type}
-🔹 **가스 종류**: ${questData.gas_type || 'N/A'}
+🔹 **가스비 필요**: ${questData.gas_type === 'Gas' ? 'Y' : 'N'}
+🔹 **체인**: ${questData.chain}
 
-📈 **경쟁률 정보**:
-  - **총 인원**: ${questData.cap > 0 ? `${questData.cap}명` : '무제한'}
-  - **현재 참여자**: ${questData.participants_count}명
-  - **예상 당첨 확률**: ${questData.win_rate_percent ? `${questData.win_rate_percent}%` : '계산 불가'}
+🔹 **기간**: ${startDate} ~ ${endDate}
+
 
 💬 **AI 분석 코멘트**:
 _${questData.comments}_
 
 🔗 **퀘스트 바로가기**:
-https://app.lootpang.life/quest/${questData.quest_id}
+https://app.galxe.com/quest/${questData.space.alias}/${questData.id}
     `.trim();
 
     return message;
