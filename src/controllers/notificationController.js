@@ -2,6 +2,9 @@ const telegramService = require('../services/telegramService');
 const logger = require('../utils/logger');
 
 class NotificationController {
+  constructor() {
+    this.sendQuestAlert = this.sendQuestAlert.bind(this);
+  }
   /**
    * 알림 전송 여부를 결정하는 내부 메서드입니다.
    * @param {object} questData - 퀘스트 데이터
