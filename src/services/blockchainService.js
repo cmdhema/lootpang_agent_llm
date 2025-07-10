@@ -11,20 +11,28 @@ class BlockchainService {
   }
 
   initializeProviders() {
+    console.log('[디버그] 블록체인 서비스 초기화 시작...');
     const sepoliaPrivateKey = process.env.SEPOLIA_PRIVATE_KEY;
     const baseSepoliaPrivateKey = process.env.BASESEPOLIA_PRIVATE_KEY;
+    console.log('[디버그] .env 파일에서 개인키를 로드했습니다.');
 
-    if (!sepoliaPrivateKey || sepoliaPrivateKey.trim() === '') {
-      throw new Error('SEPOLIA_PRIVATE_KEY가 .env 파일에 설정되지 않았습니다. 유효한 비공개 키를 추가해주세요.');
+    if (!sepoliaPrivateKey || sepoliaPrivateKey.length !== 64) {
+      console.error('[디버그] 치명적 오류: SEPOLIA_PRIVATE_KEY가 .env 파일에 없거나 유효하지 않습니다.');
+      process.exit(1);
     }
-    if (!baseSepoliaPrivateKey || baseSepoliaPrivateKey.trim() === '') {
-      throw new Error('BASESEPOLIA_PRIVATE_KEY가 .env 파일에 설정되지 않았습니다. 유효한 비공개 키를 추가해주세요.');
+    console.log('[디버그] Sepolia 개인키 유효성 검사 통과.');
+
+    if (!baseSepoliaPrivateKey || baseSepoliaPrivateKey.length !== 64) {
+      console.error('[디버그] 치명적 오류: BASESEPOLIA_PRIVATE_KEY가 .env 파일에 없거나 유효하지 않습니다.');
+      process.exit(1);
     }
+    console.log('[디버그] Base Sepolia 개인키 유효성 검사 통과.');
 
     try {
       // Sepolia 프로바이더
       this.sepoliaProvider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
       this.sepoliaSigner = new ethers.Wallet(sepoliaPrivateKey, this.sepoliaProvider);
+      console.log('[디버그] Sepolia 지갑 생성 완료.');
     } catch (error) {
       logger.error('Sepolia 서명자 초기화 실패:', error.message);
       throw new Error(`유효하지 않은 SEPOLIA_PRIVATE_KEY입니다. 키가 '0x'로 시작하는 64자리 16진수 문자열인지 확인해주세요.`);
