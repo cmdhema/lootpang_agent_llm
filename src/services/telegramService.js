@@ -11,14 +11,20 @@ class TelegramService {
 
     try {
       const configPath = path.join(process.cwd(), 'telegram', 'channels_config.json');
+      console.log(`[디버그] 텔레그램 설정 파일 경로 확인: ${configPath}`);
+
       if (fs.existsSync(configPath)) {
+        console.log('[디버그] 설정 파일 존재 확인. 파일 읽기를 시도합니다.');
         const configData = fs.readFileSync(configPath, 'utf8');
+        console.log('[디버그] 설정 파일 읽기 성공. JSON 파싱을 시도합니다.');
         const config = JSON.parse(configData);
+        console.log('[디버그] JSON 파싱 성공.');
         
         this.botToken = config.notificationChannel?.token;
         this.chatId = config.notificationChannel?.id;
 
         if (this.botToken && this.chatId) {
+          console.log('[디버그] 봇 토큰과 채팅 ID를 성공적으로 로드했습니다.');
           this.bot = new TelegramBot(this.botToken, { polling: false });
           logger.info('텔레그램 서비스가 설정 파일 기반으로 초기화되었습니다.');
         } else {
@@ -28,7 +34,9 @@ class TelegramService {
         logger.warn('channels_config.json 파일을 찾을 수 없습니다. 텔레그램 서비스가 비활성화됩니다.');
       }
     } catch (error) {
+      console.error('[디버그] 텔레그램 설정 중 치명적 오류 발생:', error);
       logger.error('텔레그램 설정 파일을 읽는 중 오류가 발생했습니다:', error);
+      process.exit(1); // 오류 발생 시 프로세스 강제 종료
     }
   }
 
