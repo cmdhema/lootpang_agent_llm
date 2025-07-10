@@ -25,10 +25,9 @@ class TelegramService {
 
         if (this.botToken && this.chatId) {
           console.log('[디버그] 봇 토큰과 채팅 ID를 성공적으로 로드했습니다.');
-          console.log('[디버그] TelegramBot 생성자를 호출하기 직전입니다. 이 다음 로그가 보이지 않으면 생성자 문제입니다.');
-          // this.bot = new TelegramBot(this.botToken, { polling: false }); // 문제 확인을 위해 임시 주석 처리
-          // logger.info('텔레그램 서비스가 설정 파일 기반으로 초기화되었습니다.'); // 임시 주석 처리
-          console.log('[디버그] TelegramBot 생성자 호출을 건너뛰었습니다.');
+          console.log('[디버그] 봇 토큰과 채팅 ID를 성공적으로 로드했습니다.');
+          this.bot = new TelegramBot(this.botToken, { polling: false });
+          logger.info('텔레그램 서비스가 설정 파일 기반으로 초기화되었습니다.');
         } else {
           logger.warn('channels_config.json 파일에 notificationChannel의 token 또는 id가 없습니다. 텔레그램 서비스가 비활성화됩니다.');
         }
