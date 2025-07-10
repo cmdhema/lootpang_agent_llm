@@ -73,19 +73,18 @@ https://app.lootpang.life/quest/${questData.quest_id}
    */
   async sendQuestNotification(questData) {
     if (!this.bot) {
-      const errorMessage = '텔레그램 봇이 초기화되지 않았습니다. 메시지를 보낼 수 없습니다.';
-      logger.error(errorMessage);
-      throw new Error(errorMessage);
+      logger.warn('텔레그램 봇이 초기화되지 않아 알림을 보낼 수 없습니다.');
+      return;
     }
 
     const message = this.formatQuestMessage(questData);
     
     try {
+      logger.info(`[Telegram] 퀘스트 알림 발송 시작: ${questData.title}`);
       await this.bot.sendMessage(this.chatId, message, { parse_mode: 'Markdown' });
-      logger.info(`텔레그램 알림이 채팅 ID로 전송되었습니다: ${this.chatId}`);
+      logger.info(`[Telegram] 퀘스트 알림 발송 성공: ${questData.title}`);
     } catch (error) {
-      logger.error('텔레그램 메시지 전송에 실패했습니다:', error.message);
-      throw error;
+      logger.error(`[Telegram] 퀘스트 알림 발송 실패: ${questData.title}`, error.message);
     }
   }
 }

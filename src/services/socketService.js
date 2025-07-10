@@ -3,62 +3,60 @@ const ethers = require('ethers');
 
 function initializeSocket(io, llmAgent, blockchainService) {
   io.on('connection', (socket) => {
-    logger.info(`클라이언트 연결됨: ${socket.id}`);
+    logger.info(`[Socket] 클라이언트 연결: ${socket.id}`);
 
     socket.on('join', (roomId) => {
       socket.join(roomId);
-      logger.info(`클라이언트 ${socket.id}가 룸 ${roomId}에 참여`);
+      logger.info(`[Socket] 룸 참여: 클라이언트 ${socket.id}가 룸 ${roomId}에 참여`);
     });
 
     socket.on('message', async (data) => {
+      const { text, roomId, userId } = data;
+      logger.info(`[Socket] 메시지 수신 (룸: ${roomId}): "${text}"`);
+
       try {
-        logger.info('메시지 수신:', data);
-        
-        const { text, roomId, userId } = data;
-        logger.info('파싱된 데이터:', { text, roomId, userId });
-        
         if (!text || !roomId) {
+          logger.warn(`[Socket] 잘못된 메시지 (text 또는 roomId 누락):`, data);
           socket.emit('error', { message: 'Message or room ID is missing.' });
           return;
         }
 
         socket.userAddress = userId;
-        logger.info('사용자 주소 저장:', socket.userAddress);
 
         let userCollateral = null;
         let userDebt = null;
-        
+
         if (userId && userId !== 'anonymous' && ethers.isAddress(userId)) {
           try {
+            logger.info(`[Blockchain] 사용자(${userId}) 재정 상태 조회 시작`);
             userCollateral = await blockchainService.getUserCollateral(userId);
             userDebt = await blockchainService.getUserDebt(userId);
-            logger.info(`사용자 재정 상태 - 담보: ${userCollateral} ETH, 부채: ${userDebt} KKCoin`);
+            logger.info(`[Blockchain] 사용자(${userId}) 재정 상태 - 담보: ${userCollateral}, 부채: ${userDebt}`);
           } catch (error) {
-            logger.warn('사용자 재정 상태 조회 실패:', error.message);
+            logger.warn(`[Blockchain] 사용자(${userId}) 재정 상태 조회 실패:`, error.message);
           }
         }
 
+        logger.info(`[LLM] 메시지 분석 시작: "${text}"`);
         const analysis = await llmAgent.analyzeMessage(text, userId, userCollateral, userDebt);
-        logger.info('LLM 분석 결과:', analysis);
+        logger.info(`[LLM] 메시지 분석 완료: ${analysis.response}`);
 
-        const currentSession = llmAgent.getUserSession(userId);
-        logger.info('현재 사용자 세션:', {
-          userId,
-          state: currentSession.state,
-          context: currentSession.context,
-          conversationHistory: currentSession.conversationHistory.slice(-2)
-        });
-
-        io.to(roomId).emit('response', { ...analysis, userId });
-
+        if (analysis.action) {
+          logger.info(`[Blockchain] 액션 처리 시작: ${analysis.action}`, analysis.params);
+          const response = await blockchainService.handleAction(analysis, socket.userAddress);
+          io.to(roomId).emit('response', response);
+          logger.info(`[Blockchain] 액션 처리 완료`);
+        } else {
+          io.to(roomId).emit('response', { message: analysis.response });
+        }
       } catch (error) {
-        logger.error('메시지 처리 오류:', error);
-        socket.emit('error', { message: 'Error processing message', details: error.message });
+        logger.error(`[Socket] 메시지 처리 중 오류 발생 (룸: ${roomId}):`, error);
+        socket.emit('error', { message: 'An error occurred while processing your message.' });
       }
     });
 
     socket.on('disconnect', () => {
-      logger.info(`클라이언트 연결 해제: ${socket.id}`);
+      logger.info(`[Socket] 클라이언트 연결 끊김: ${socket.id}`);
     });
   });
 }
