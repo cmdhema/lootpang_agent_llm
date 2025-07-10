@@ -14,14 +14,16 @@ const logger = winston.createLogger({
   ]
 });
 
-// 개발 환경에서는 콘솔에도 출력
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    )
-  }));
-}
+// 모든 환경에서 콘솔에 로그를 출력하도록 설정합니다.
+// 단, 프로덕션 환경에서는 색상 코드 없이 간단한 포맷으로 출력하고,
+// 개발 환경에서는 색상을 포함하여 가독성을 높입니다.
+logger.add(new winston.transports.Console({
+  format: winston.format.combine(
+    process.env.NODE_ENV === 'production' 
+      ? winston.format.uncolorize() 
+      : winston.format.colorize(),
+    winston.format.simple()
+  )
+}));
 
 module.exports = logger; 
