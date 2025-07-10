@@ -2,22 +2,15 @@ const logger = require('../utils/logger');
 const ethers = require('ethers');
 
 function initializeSocket(io, llmAgent, blockchainService) {
-  console.log('[디버그] 소켓 서비스 초기화 시작...');
-  console.log('[디버그] Socket.IO 서버 인스턴스가 생성되었습니다.');
-
   io.on('connection', (socket) => {
-    console.log(`[디버그] 새 클라이언트 연결 이벤트 발생: ${socket.id}`);
     logger.info(`클라이언트 연결됨: ${socket.id}`);
 
     socket.on('join', (roomId) => {
-      console.log(`[디버그] 클라이언트 ${socket.id}로부터 join 요청 수신: ${roomId}`);
       socket.join(roomId);
       logger.info(`클라이언트 ${socket.id}가 룸 ${roomId}에 참여`);
-      console.log(`[디버그] 클라이언트 ${socket.id}를 룸 ${roomId}에 성공적으로 참여시켰습니다.`);
     });
 
     socket.on('message', async (data) => {
-      console.log(`[디버그] 클라이언트 ${socket.id}로부터 메시지 수신`);
       try {
         logger.info('메시지 수신:', data);
         
