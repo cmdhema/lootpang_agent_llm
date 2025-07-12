@@ -29,6 +29,18 @@ class NotificationController {
         return false;
       }
     }
+
+    // rewards 배열에서 reward_type이 'LOYALTYPOINTS'만 있는 경우 알림을 보내지 않음
+    if (questData.rewards && questData.rewards.length > 0) {
+      const allRewardsAreLoyaltyPoints = questData.rewards.every(reward => 
+        reward.reward_type === 'LOYALTYPOINTS'
+      );
+
+      if (allRewardsAreLoyaltyPoints) {
+        logger.info(`알림 전송 건너뜀 (LOYALTYPOINTS만 있음): ${questData.id}`);
+        return false;
+      }
+    }
     
     return true;
   }

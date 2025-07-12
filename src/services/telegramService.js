@@ -61,6 +61,7 @@ class TelegramService {
 
 🏢 **프로젝트**: ${questData.space.name}
 ✨ **퀘스트**: ${questData.name}
+${questData.reward_name ? `🔹 **보상**: ${questData.reward_name}` : ''}
 ${questData.nft_contract_address ? `🔹 **보상**: NFT` : ''}
 ${questData.user_token_amount > 0 && questData.token_decimal != null ? `🎁 **인당 보상**: $${Number(questData.user_token_amount) / Math.pow(10, Number(questData.token_decimal))} ${questData.token_symbol || ''}` : ''}
 ${questData.cap > 0 ? `🔹 **총 인원**: ${questData.cap}명` : '🔹 **총 인원**: 무제한'}
