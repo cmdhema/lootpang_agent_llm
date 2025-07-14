@@ -57,24 +57,24 @@ class TelegramService {
     const endDate = formatDt(questData.end_time);
 
     const message = `
-🚀 **새로운 추천 퀘스트 알림** 🚀
+🚀 *새로운 추천 퀘스트 알림* 🚀
 
-🏢 **프로젝트**: ${questData.space.name}
-✨ **퀘스트**: ${questData.name}
-${questData.reward_name ? `🔹 **보상**: ${questData.reward_name}` : ''}
-${questData.nft_contract_address ? `🔹 **보상**: NFT` : ''}
-${questData.user_token_amount > 0 && questData.token_decimal != null ? `🎁 **인당 보상**: $${Number(questData.user_token_amount) / Math.pow(10, Number(questData.token_decimal))} ${questData.token_symbol || ''}` : ''}
-${questData.cap > 0 ? `🔹 **총 인원**: ${questData.cap}명` : '🔹 **총 인원**: 무제한'}
+🏢 *프로젝트*: ${questData.space.name}
+✨ *퀘스트*: ${questData.name}
+${questData.reward_name ? `🔹 *보상*: ${questData.reward_name}` : ''}
+${questData.nft_contract_address ? `🔹 *보상*: NFT` : ''}
+${questData.user_token_amount > 0 && questData.token_decimal != null ? `🎁 *인당 보상*: $${Number(questData.user_token_amount) / Math.pow(10, Number(questData.token_decimal))} ${questData.token_symbol || ''}` : ''}
+${questData.cap > 0 ? `🔹 *총 인원*: ${questData.cap}명` : '🔹 *총 인원*: 무제한'}
 
-🔹 **분배 방식**: ${questData.distribution_type}
-🔹 **가스비 필요**: ${questData.gas_type === 'Gas' ? 'Y' : 'N'}
-🔹 **체인**: ${questData.chain}
+🔹 *분배 방식*: ${questData.distribution_type}
+🔹 *가스비 필요*: ${questData.gas_type === 'Gas' ? 'Y' : 'N'}
+🔹 *체인*: ${questData.chain}
 
-🔹 **기간**: ${startDate} ~ ${endDate}
+🔹 *기간*: ${startDate} ~ ${endDate}
 
-🔹 **추천 사유**: ${questData.is_sns_only ? 'SNS 참여' : 'SNS 참여 및 비용이 없는 복합 퀘스트'}
+🔹 *추천 사유*: ${questData.is_sns_only ? 'SNS 참여' : 'SNS 참여 및 비용이 없는 복합 퀘스트'}
 
-🔗 **퀘스트 바로가기**:
+🔗 *퀘스트 바로가기*:
 https://app.galxe.com/quest/${questData.space.alias}/${questData.id}
     `.trim();
 
