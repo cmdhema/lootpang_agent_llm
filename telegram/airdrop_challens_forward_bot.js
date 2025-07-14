@@ -300,6 +300,30 @@ async function startMonitoring() {
     }
 }
 
+// 메시지에서 URL 추출 함수
+function extractUrls(text, entities = []) {
+    const urls = [];
+    
+    // entities에서 URL 추출 (텔레그램 메시지 엔티티 사용)
+    if (entities && entities.length > 0) {
+        for (const entity of entities) {
+            if (entity.type === 'url' || entity.type === 'text_link') {
+                const url = entity.type === 'url' 
+                    ? text.substring(entity.offset, entity.offset + entity.length)
+                    : entity.url;
+                urls.push(url);
+            }
+        }
+    }
+    
+    // 정규식으로도 한 번 더 체크 (엔티티로 감지되지 않은 URL이 있을 수 있음)
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const matches = text.match(urlRegex) || [];
+    
+    // 중복 제거
+    return [...new Set([...urls, ...matches])];
+}
+
 async function processMessage(message, messageText, channelInfo) {
     try {
         // 메시지 분석 및 처리 로직
@@ -338,7 +362,26 @@ async function processMessage(message, messageText, channelInfo) {
                     break;
             }
             
-            // 🚨 알림 전송 실행
+            // 링크 추출 및 처리
+            const entities = message.entities || [];
+            const urls = extractUrls(messageText, entities);
+            
+            if (urls.length > 0) {
+                console.log(`🔗 발견된 링크: ${urls.join(', ')}`);
+                
+                // 링크만 별도로 전송
+                const linkMessage = `🔗 *링크*:\n${urls.join('\n')}`;
+                await sendNotification({ ...message, text: linkMessage }, linkMessage, channelInfo);
+                
+                // 원본 메시지에서 링크 제거 (선택사항)
+                // let cleanText = messageText;
+                // urls.forEach(url => {
+                //     cleanText = cleanText.replace(url, '').trim();
+                // });
+                // messageText = cleanText;
+            }
+            
+            // 🚨 알림 전송 실행 (원본 메시지)
             await sendNotification(message, messageText, channelInfo);
             
             // 📤 원본 메시지 포워드 (설정에 따라)
