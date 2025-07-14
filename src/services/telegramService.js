@@ -56,7 +56,13 @@ class TelegramService {
     const startDate = formatDt(questData.start_time);
     const endDate = formatDt(questData.end_time);
 
-    const distType = questData.distribution_type === 'ZK_RAFFLE' ? 'RAFFLE' : questData.distribution_type;
+    let distType = questData.distribution_type;
+    if (distType === 'ZK_RAFFLE') {
+      distType = '자동 RAFFLE';
+    } else if (distType === 'RAFFLE') {
+      distType = '수동 RAFFLE';
+    }
+
     // 보상 관련 메시지 구성
     let rewardLine = '';
     if (questData.reward_name) {
