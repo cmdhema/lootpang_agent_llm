@@ -37,7 +37,7 @@ export class CredAnalyzer {
     'SPACE_FOLLOWER'
   ];
 
-  ANALYSIS_TARGET_CRED_TYPES = [
+  ANALYSIS_TARGET_CRED_ID_TYPES = [
     'CSV',
     'API',
     'REST',
@@ -252,7 +252,8 @@ Keep all reasoning within 30 characters each in English.
   }
 
   async analyzeCredential(credential: any, questInfo: any) {
-    if (!this.ANALYSIS_TARGET_CRED_TYPES.includes(credential.cred_type)) {
+    console.log('Credential 분석 id_type:', credential.id_type)
+    if (!this.ANALYSIS_TARGET_CRED_ID_TYPES.includes(credential.id_type)) {
       return null;
     }
 
@@ -363,7 +364,7 @@ Keep all reasoning within 30 characters each in English.
 
       const existingCredentialIds = new Set(existingAnalyses?.map((item: any) => item.credential_id) || []);
       console.log(`이미 분석된 credentials: ${existingCredentialIds.size}개`);
-      console.log(`분석 대상 타입: ${this.ANALYSIS_TARGET_CRED_TYPES.join(', ')}`);
+      console.log(`분석 대상 타입: ${this.ANALYSIS_TARGET_CRED_ID_TYPES.join(', ')}`);
 
       // 분석 대상 credentials 조회 (특정 cred_type만, 이미 분석된 것 제외)
       const { data: allCredentials, error: credError } = await this.supabase
@@ -372,6 +373,7 @@ Keep all reasoning within 30 characters each in English.
           id,
           name,
           description,
+          id_type,
           cred_type,
           group_id,
           credential_groups!inner (
@@ -385,7 +387,7 @@ Keep all reasoning within 30 characters each in English.
             )
           )
         `)
-        .in('cred_type', this.ANALYSIS_TARGET_CRED_TYPES)
+        .in('id_type', this.ANALYSIS_TARGET_CRED_ID_TYPES)
         .order('id', { ascending: false })
         .limit(maxCredentials * 2); // 여유분 확보
 

@@ -13,8 +13,15 @@ serve(async (req) => {
 
     // 2. 웹훅 페이로드에서 새로 생성된 퀘스트 ID 추출
     const payload = await req.json();
-    const newQuestId = payload.record.id;
-    console.log(`Webhook received for new quest: ${newQuestId}`);
+    // webhook 호출과 직접 호출 모두 지원
+    const newQuestId = payload.record?.id || payload.questId;
+    
+    if (!newQuestId) {
+      throw new Error('questId가 제공되지 않았습니다. payload.record.id 또는 payload.questId가 필요합니다.');
+    }
+    
+    console.log(`퀘스트 알림 요청: ${newQuestId}`);
+    console.log('요청 타입:', payload.record ? 'Webhook' : '직접 호출');
 
     // 3. 데이터베이스 함수(RPC)를 호출하여 상세 정보 조회
     const { data: questDetails, error: rpcError } = await supabaseClient

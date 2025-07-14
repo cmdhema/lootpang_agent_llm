@@ -73,10 +73,6 @@ ${questData.cap > 0 ? `🔹 **총 인원**: ${questData.cap}명` : '🔹 **총 �
 
 🔹 **기간**: ${startDate} ~ ${endDate}
 
-
-💬 **AI 분석 코멘트**:
-_${questData.comments}_
-
 🔗 **퀘스트 바로가기**:
 https://app.galxe.com/quest/${questData.space.alias}/${questData.id}
     `.trim();
@@ -97,11 +93,11 @@ https://app.galxe.com/quest/${questData.space.alias}/${questData.id}
     const message = this.formatQuestMessage(questData);
     
     try {
-      logger.info(`[Telegram] 퀘스트 알림 발송 시작: ${questData.title}`);
+      logger.info(`[Telegram] 퀘스트 알림 발송 시작: ${questData.name}`);
       await this.bot.sendMessage(this.chatId, message, { parse_mode: 'Markdown' });
-      logger.info(`[Telegram] 퀘스트 알림 발송 성공: ${questData.title}`);
+      logger.info(`[Telegram] 퀘스트 알림 발송 성공: ${questData.name}`);
     } catch (error) {
-      logger.error(`[Telegram] 퀘스트 알림 발송 실패: ${questData.title}`, error.message);
+      logger.error(`[Telegram] 퀘스트 알림 발송 실패: ${questData.name}`, error.message);
     }
   }
 }
