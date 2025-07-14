@@ -91,16 +91,23 @@ https://app.galxe.com/quest/${questData.space.alias}/${questData.id}
       return;
     }
 
-    const message = this.formatQuestMessage(questData);
+    const message = escapeMarkdownV2(this.formatQuestMessage(questData));
     
     try {
       logger.info(`[Telegram] 퀘스트 알림 발송 시작: ${questData.name}`);
-      await this.bot.sendMessage(this.chatId, message, { parse_mode: 'Markdown' });
+      console.log(message);
+      await this.bot.sendMessage(this.chatId, message, { parse_mode: 'MarkdownV2' });
       logger.info(`[Telegram] 퀘스트 알림 발송 성공: ${questData.name}`);
     } catch (error) {
       logger.error(`[Telegram] 퀘스트 알림 발송 실패: ${questData.name}`, error.message);
     }
   }
+  
+}
+
+function escapeMarkdownV2(text) {
+  return text
+    .replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&'); // MarkdownV2 특수문자 이스케이프
 }
 
 // 싱글턴 인스턴스로 내보내기
