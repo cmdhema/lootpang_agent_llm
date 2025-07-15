@@ -121,17 +121,12 @@ async function sendNotification(originalMessage, messageText, sourceChannel) {
         
         // 알림 메시지 포맷 생성
         const notificationText = `
-🚨 **새로운 메시지 감지!**
+🚨 **New Forwarded Airdrop Message!**
 
-📺 **채널**: ${sourceChannel.name} (@${sourceChannel.username})
-⏰ **시간**: ${messageDate.toLocaleString()}
-🔗 **메시지 ID**: ${originalMessage.id}
+📺 **Origin Channel**: ${sourceChannel.name} (@${sourceChannel.username})
 
-📝 **내용**:
+📝 **Contents**:
 ${messageText}
-
----
-🤖 자동 감지 시스템
         `.trim();
 
         // 채널로 전송 (MY_NOTIFICATION_CHANNEL 사용)
