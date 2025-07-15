@@ -12,6 +12,7 @@ class NotificationController {
    * @private
    */
   _shouldSendNotification(questData) {
+    logger.info(questData);
     // type이 'Oat'인 경우 알림을 보내지 않음
     if (questData.type === 'Oat') {
       logger.info(`알림 전송 건너뜀 (Oat 조건): ${questData.id}`);

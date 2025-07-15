@@ -105,7 +105,7 @@ https://app.galxe.com/quest/${questData.space.alias}/${questData.id}
    * 포맷된 메시지를 텔레그램으로 전송합니다.
    * @param {object} questData - Edge Function에서 전달된 퀘스트 데이터
    */
-  async sendQuestNotification(questData) {
+async sendQuestNotification(questData) {
     if (!this.bot) {
       logger.warn('텔레그램 봇이 초기화되지 않아 알림을 보낼 수 없습니다.');
       return;
@@ -115,7 +115,6 @@ https://app.galxe.com/quest/${questData.space.alias}/${questData.id}
 
     try {
       logger.info(`[Telegram] 퀘스트 알림 발송 시작: ${questData.name}`);
-      console.log(message);
       await this.bot.sendMessage(this.chatId, message, { parse_mode: 'MarkdownV2' });
       logger.info(`[Telegram] 퀘스트 알림 발송 성공: ${questData.name}`);
     } catch (error) {
