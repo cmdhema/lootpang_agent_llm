@@ -42,7 +42,8 @@ export class CredAnalyzer {
     'API',
     'REST',
     'SUBGRAPH',
-    'SURVEY'
+    'SURVEY',
+    'GOOGLE_SHEET'
   ];
 
   ALWAYS_ONCHAIN_TYPES = [
