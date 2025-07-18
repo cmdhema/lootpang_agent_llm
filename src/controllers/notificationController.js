@@ -1,3 +1,4 @@
+const util = require('util');
 const telegramService = require('../services/telegramService');
 const logger = require('../utils/logger');
 
@@ -12,7 +13,7 @@ class NotificationController {
    * @private
    */
   _shouldSendNotification(questData) {
-    logger.info(questData);
+    logger.info(util.inspect(questData, { depth: null, colors: false }));
     // type이 'Oat'인 경우 알림을 보내지 않음
     if (questData.type === 'Oat') {
       logger.info(`알림 전송 건너뜀 (Oat 조건): ${questData.id}`);
