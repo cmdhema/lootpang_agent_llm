@@ -58,43 +58,43 @@ class TelegramService {
 
     let distType = questData.distribution_type;
     if (distType === 'ZK_RAFFLE') {
-      distType = '자동 RAFFLE';
+      distType = 'Automatic RAFFLE';
     } else if (distType === 'RAFFLE') {
-      distType = '수동 RAFFLE';
+      distType = 'Manual RAFFLE';
     }
 
     // 보상 관련 메시지 구성
     let rewardLine = '';
     if (questData.reward_name) {
-      rewardLine = `🔹 보상: ${questData.reward_name}`;
+      rewardLine = `🔹 Reward: ${questData.reward_name}`;
     } else if (questData.nft_contract_address) {
-      rewardLine = '🔹 보상: NFT';
+      rewardLine = '🔹 Reward: NFT';
     }
 
     let userRewardLine = '';
     if (questData.user_token_amount > 0 && questData.token_decimal != null) {
       const amount = Number(questData.user_token_amount) / Math.pow(10, Number(questData.token_decimal));
       const symbol = questData.token_symbol || '';
-      userRewardLine = `🎁 인당 보상: $${amount} ${symbol}`;
+      userRewardLine = `🎁 Reward per User: $${amount} ${symbol}`;
     }
     const message = `
-🚀 새로운 추천 퀘스트 알림 🚀
+🚀 New Recommend Quest 🚀
 
-🏢 프로젝트: ${questData.space.name}
-✨ 퀘스트: ${questData.name}
+🏢 Project: ${questData.space.name}
+✨ Quest: ${questData.name}
 ${rewardLine}
 ${userRewardLine}
-${questData.cap > 0 ? `🔹 총 인원: ${questData.cap}명` : '🔹 총 인원: 무제한'}
+${questData.cap > 0 ? `🔹 Total Participants: ${questData.cap}명` : '🔹 Total Participants: Unlimited'}
 
-🔹 분배 방식: ${distType}
-🔹 가스비 필요: ${questData.gas_type === 'Gas' ? 'Y' : 'N'}
-🔹 체인: ${questData.chain}
+🔹 Distribution Type: ${distType}
+🔹 Gas Fee Required: ${questData.gas_type === 'Gas' ? 'Y' : 'N'}
+🔹 Chain: ${questData.chain}
 
-🔹 기간: ${startDate} ~ ${endDate}
+🔹 Period: ${startDate} ~ ${endDate}
 
-🔹 추천 사유: ${questData.is_sns_only ? 'SNS 참여' : 'SNS 참여 및 비용이 없는 복합 퀘스트'}
+🔹 Reason for Recommendation: ${questData.is_sns_only ? 'SNS Participation' : 'SNS Participation and Costless Complex Quest'}
 
-🔗 퀘스트 바로가기:
+🔗 Quest Link:
 https://app.galxe.com/quest/${questData.space.alias}/${questData.id}
     `.trim();
 
